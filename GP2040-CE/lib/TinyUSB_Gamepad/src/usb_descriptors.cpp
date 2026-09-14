@@ -9,6 +9,9 @@
 #include "usb_driver.h"
 #include "gamepad/GamepadDescriptors.h"
 #include "webserver_descriptors.h"
+#include "updater_driver.h"
+
+extern UsbMode usb_mode;
 
 // Invoked when received GET STRING DESCRIPTOR request
 // Application return pointer to descriptor, whose contents must exist long enough for transfer to complete
@@ -16,7 +19,11 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
 {
 	(void)langid;
 
-	if (get_input_mode() == INPUT_MODE_CONFIG)
+	if (usb_mode == USB_MODE_UPDATER)
+	{
+		return updater_string_descriptor_cb(index);
+	}
+	else if (get_input_mode() == INPUT_MODE_CONFIG)
 	{
 		return web_tud_descriptor_string_cb(index, langid);
 	}
@@ -31,6 +38,9 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
 // Application return pointer to descriptor
 uint8_t const *tud_descriptor_device_cb(void)
 {
+	if (usb_mode == USB_MODE_UPDATER)
+		return updater_device_descriptor_cb();
+
 	switch (get_input_mode())
 	{
 		case INPUT_MODE_CONFIG:
@@ -81,6 +91,9 @@ uint8_t const *tud_hid_descriptor_report_cb(uint8_t itf)
 // Descriptor contents must exist long enough for transfer to complete
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index)
 {
+	if (usb_mode == USB_MODE_UPDATER)
+		return updater_configuration_descriptor_cb();
+
 	switch (get_input_mode())
 	{
 		case INPUT_MODE_CONFIG:

@@ -1,99 +1,108 @@
-# gba-pico-gamepad
+# gblink-gamepad
 
-Proof-of-concept Game Boy Advance (GBA) to USB controller, which uses Raspberry Pi Pico as a bridge.
+Turns a [GB-Link](https://gblink.io) adapter and a Game Boy Advance into a USB controller.
 
-[![](https://img.youtube.com/vi/JmBufgcb4Gw/hqdefault.jpg)](https://www.youtube.com/watch?v=JmBufgcb4Gw "Youtube video for gba-pico-gamepad")
+This is a fork of [gba-pico-gamepad](https://github.com/copyrat90/gba-pico-gamepad) by copyrat90, adapted to run on GB-Link hardware.
+
+```
+GBA  ── GBC link cable ──  GB-Link  ── USB ──  PC / Switch / PS3 / PS4
+```
 
 
-# How it's done
+# Requirements
 
-This project is essentially a modified version of [GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE) that enables communication with the Game Boy Advance using the GBA link cable.
+* GB-Link adapter
+* Game Boy Advance, turned on **without a cartridge**
+* **GBC** link cable (a GBA link cable will not work)
 
-In the original GP2040-CE, key presses were received using pull-up GPIO signals.\
-However, The GBA link cable only provides [4 pins for the communication](https://user-images.githubusercontent.com/1631752/124884342-8ee7fc80-dfa8-11eb-9bd2-4741a4b9acc6.png), which is insufficient for the 10 keys on the GBA.\
-To overcome this limitation, GP2040-CE was modified to utilize SPI for receiving packets from the GBA.
 
-To send key presses on the GBA via SPI, an example program from the [gba-link-connection](https://github.com/rodri042/gba-link-connection) was used with a minor modification.
+# Installing
 
-To run this program on the GBA, [gba_03_multiboot](https://github.com/akkera102/gba_03_multiboot) is ported to the RPi Pico.\
-This allows for sending a program from RPi Pico to GBA via SPI and running it, eliminating the need for additional hardware such as a flash cart.
+Use the [GB-Link Launcher](https://launcher.gblink.io) in a Chromium-based browser:
 
-And that's about it.
+1. Plug in the GB-Link with no GBA connected.
+2. Open the device panel and install **GBLink Gamepad firmware**.
 
-[Read this in Korean(한국어) with a little more detail](https://velog.io/@copyrat90/gba-pico-gamepad)
+To go back to the regular GBLink firmware, do the same with the GBA off and pick **GBLink firmware**. The gamepad firmware only shows up in the launcher while no GBA is connected.
+
+To flash manually, hold BOOTSEL while plugging in the GB-Link and copy `gblink-gamepad.uf2` to the `RPI-RP2` drive.
 
 
 # Usage
 
-1. Download the `gba-pico-gamepad-v*.uf2` binary from the [Release](https://github.com/copyrat90/gba-pico-gamepad/releases), and flash it to your RPi Pico.
-    * You may have to [nuke your RPi Pico](https://www.raspberrypi.org/documentation/pico/getting-started/static/6f6f31460c258138bd33cc96ddd76b91/flash_nuke.uf2) before flashing it.
+1. Plug the GB-Link into your PC or console.
+2. Connect the GBA with a GBC link cable and turn it on without a cartridge.\
+   The GB-Link sends the controller program to the GBA, which takes about a second.
+3. The GBA screen shows a mode menu for 5 seconds. Hold a button to pick a mode:
 
-2. Cut your GBA link cable, and wire it to the RPi Pico as below.
-    * RPi Pico `21` (`SPI0 RX`) pin <-> GBA `SO` pin
-    * RPi Pico `23` (`GND`) pin <-> GBA `GND` pin
-    * RPi Pico `24` (`SPI0 SCK`) pin <-> GBA `SC` pin
-    * RPi Pico `25` (`SPI0 TX`) pin <-> GBA `SI` pin
-    * ![Overall pinout](https://i.ibb.co/xgZW66y/rpi-pico-pinout.png "Overall pinout")
-    * [Raspberry Pi Pico Pinout](https://datasheets.raspberrypi.com/pico/Pico-R3-A4-Pinout.pdf)
-    * [GBA Link cable Pinout](https://gist.github.com/copyrat90/5be788ccec65f3d3ca3de468203c75b7)
-        * Your GBA Link cable colors are likely to be different.\
-        It is highly recommended to cut and open the shell to see your pinout.
-        * ![GBA pinout](https://user-images.githubusercontent.com/1631752/124884342-8ee7fc80-dfa8-11eb-9bd2-4741a4b9acc6.png "GBA pinout")
+    | Hold | Mode |
+    |---|---|
+    | `A` | XInput (Xbox) |
+    | `B` | Nintendo Switch |
+    | `L` | DirectInput / PS3 |
+    | `R` | PS4 |
+    | *(nothing)* | Last used mode (XInput on first boot) |
 
-3. Connect this cable to the GBA and turn it on **without a cartridge**.
-    * The program is sent from RPi Pico to GBA via multiboot, and with a cartridge it will not work.
+    The last button held wins, and the choice is saved.
+4. Play. The GBA screen shows the active mode.
 
-4. Plug the USB Cable to your PC.\
-   It will start sending the program once the GBA is ready.
-    * You can hold down certain key on boot to change Input Mode.
-        + Note that the key binding is differ from the [original](https://gp2040-ce.info/#/usage?id=input-modes).
-        + Hold `B` on boot -> Nintendo Switch
-        + Hold `A` on boot -> XInput
-        + Hold `L` on boot -> DirectInput/PS3
-        + Hold `R` on boot -> PS4
-    * You can [change the D-Pad Mode anytime with certain key combination.](https://gp2040-ce.info/#/usage?id=d-pad-modes)
-    * GP2040-CE's Web Config is disabled.
+To pick a different mode, turn the GBA off and on again. If the link is lost for about 2 seconds, the GB-Link restarts, waits for the GBA and shows the menu again.
 
-5. Enjoy your GBA as an USB gamepad.
-    * If you accidentally pulled out your cable, you can re-plug it and press `Start` to reconnect.
+* Face buttons follow the console's labels: in Switch mode GBA `B`/`A` are Switch `B`/`A`; in every other mode GBA `A`/`B` are Xbox `A`/`B` (PlayStation Cross/Circle).
+* [D-pad modes](https://gp2040-ce.info/#/usage?id=d-pad-modes) can be changed with the usual GP2040-CE hotkeys.
+* Holding `SELECT` + `START` + `UP` during the mode menu reboots the GB-Link into the USB bootloader.
+* GP2040-CE's Web Config is disabled.
+
+## Status LED
+
+| LED | Meaning |
+|---|---|
+| Red | Waiting for the GBA, or link lost |
+| Amber | No GBA yet; the launcher can reach the adapter |
+| Blue | Sending the controller program to the GBA |
+| Green | Connected |
+| Magenta | Sending the program failed. Turn the GBA off, replug the GB-Link and try again |
+
+
+# How it works
+
+This is a modified [GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE) 0.7.1 that reads buttons from the GBA over the link port instead of from GPIO pins.
+
+* The GBA runs a small program based on the `LinkSPI_demo` example from [gba-link-connection](https://github.com/rodri042/gba-link-connection). It sends its key state on every 32-bit link exchange and draws the mode menu from what the adapter sends back.
+* The program is sent to the GBA with multiboot, ported from [gba_03_multiboot](https://github.com/akkera102/gba_03_multiboot) ([`GP2040-CE/src/gba/multiboot.cpp`](GP2040-CE/src/gba/multiboot.cpp)).
+* The link runs on a PIO SPI master on the GB-Link's link port pins ([`GP2040-CE/src/gba/spi32.cpp`](GP2040-CE/src/gba/spi32.cpp)), using the same PIO programs as [GBLink-Firmware](https://github.com/GB-Link/GBLink-Firmware).
+* While no GBA is connected, the adapter enumerates as a WebUSB "updater" device (VID `0x2FE3`, PID `0x000B`) that the launcher uses to read the firmware version and reboot into the bootloader ([`GP2040-CE/lib/TinyUSB_Gamepad/src/updater_driver.cpp`](GP2040-CE/lib/TinyUSB_Gamepad/src/updater_driver.cpp)).
 
 
 # Build
 
-This is a build process for the Ubuntu 22.04.\
-You have to use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) if you are on Windows.
+Requirements:
 
-1. Install [devkitARM](https://devkitpro.org/wiki/Getting_Started) and `gba-dev` package.
+* [devkitARM](https://devkitpro.org/wiki/Getting_Started) with the `gba-dev` package
+* Pico SDK 1.5.0 and the Arm GNU toolchain 12.3, e.g. as installed by the Raspberry Pi Pico VS Code extension
+* `cmake`, `make`, `python3`
 
-2. Install the dependencies via command below.
-    ```bash
-    sudo apt install -y cmake xxd python3
-    ```
+```bash
+./build.sh
+```
 
-3. Run this command to build.
-    > Change the path if you have installed devkitARM somewhere else.
-    ```bash
-    export DEVKITPRO=/opt/devkitpro/
-    export DEVKITARM=/opt/devkitpro/devkitARM/
-    export PATH=$DEVKITARM/bin:/$DEVKITPRO/tools/bin/:$PATH
-    export CC=$DEVKITARM/bin/arm-none-eabi-gcc
-    export CXX=$DEVKITARM/bin/arm-none-eabi-g++
+The script defaults to `/opt/devkitpro`, `~/.pico-sdk/sdk/1.5.0` and `~/.pico-sdk/toolchain/12_3_Rel1`. Override them with `DEVKITPRO`, `PICO_SDK_PATH` and `PICO_TOOLCHAIN_PATH`.
 
-    ./build.sh
-    ```
+The firmware is written to `build/gblink-gamepad.uf2`.
 
-4. If everything goes right, you should see the `build/gba-pico-gamepad.uf2` binary.
+## Releasing
+
+1. Bump the version in [`GP2040-CE/lib/TinyUSB_Gamepad/src/updater_driver.h`](GP2040-CE/lib/TinyUSB_Gamepad/src/updater_driver.h). The launcher reads it from the device.
+2. Build, then copy the UF2 into the launcher's `assets/firmware/` as `gblink-gamepad.v<version>.uf2` and regenerate its manifest.
 
 
 # Credits
 
-This project is essentially an integration of the projects listed below.\
-Without them, this would not have been possible.
-
-* [gba-link-connection](https://github.com/rodri042/gba-link-connection) : Game Boy Advance (GBA) C++ libraries to interact with the Serial Port.
+* [gba-pico-gamepad](https://github.com/copyrat90/gba-pico-gamepad) : The original Raspberry Pi Pico project this fork is based on
+* [gba-link-connection](https://github.com/rodri042/gba-link-connection) : Game Boy Advance (GBA) C++ libraries to interact with the Serial Port
 * [GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE) : Gamepad firmware for the Raspberry Pi Pico
 * [gba_03_multiboot](https://github.com/akkera102/gba_03_multiboot) : Raspberry Pi GBA Loader
-    * It's integrated in [`GP2040-CE/src/gba/multiboot.cpp`](GP2040-CE/src/gba/multiboot.cpp)
+* [GBLink-Firmware](https://github.com/GB-Link/GBLink-Firmware) : Link port PIO SPI and status LED programs
 
 
 # License

@@ -12,15 +12,38 @@
 
 #include "gba/spi32.h"
 #include "gba/GBAKey.h"
+#include "usb_driver.h"
+
+#include "tusb.h"
+#include "hardware/watchdog.h"
+#include "hardware/structs/watchdog.h"
+
+// How long to wait for a GBA before bringing up the updater USB identity
+#ifndef GBA_UPDATER_DELAY_MS
+#define GBA_UPDATER_DELAY_MS 1500
+#endif
 
 namespace gba
 {
 
+// Delay after each handshake/control word
 static constexpr int GBA_DELAY_MS = 3;
+
+// Delay after each header/data word. Raise it if transfers fail (magenta LED).
+#ifndef GBA_DATA_DELAY_US
+#define GBA_DATA_DELAY_US 100
+#endif
 
 uint32_t spi32Delay(uint32_t val) {
     uint32_t result = gba::spi32(val);
     sleep_ms(GBA_DELAY_MS);
+
+    return result;
+}
+
+static uint32_t spi32Fast(uint32_t val) {
+    uint32_t result = gba::spi32(val);
+    busy_wait_us(GBA_DATA_DELAY_US);
 
     return result;
 }
@@ -34,15 +57,43 @@ bool sendGBARom(const uint8_t* romAddr, const uint32_t romSize) {
     // -----------------------------------------------------
     // printf("Waiting for GBA...\n");
     
+    // Wait for the BIOS multiboot handshake (0x7202) or a frame from an
+    // already-running controller ROM (0xA5A5).
+    //
+    // If no GBA shows up, enumerate as the WebUSB updater so the GBLink
+    // launcher can reach the adapter. TinyUSB cannot change identity once
+    // started, so when a GBA then appears, reboot and start over.
+    uint32_t waitedMs = 0;
+    bool updaterUp = false;
     do {
         recv = gba::spi32(0x6202);
-        sleep_ms(10);
-    } while ((recv >> 16) != 0x7202 && recv != (GBAKey::START));
+        if (updaterUp) {
+            for (int i = 0; i < 10; i++) {
+                tud_task();
+                sleep_ms(1);
+            }
+        } else {
+            sleep_ms(10);
+        }
+        waitedMs += 10;
+        if (!updaterUp && waitedMs >= GBA_UPDATER_DELAY_MS) {
+            initialize_updater();
+            updaterUp = true;
+            setLed(0x10, 0x04, 0x00); // amber: updater on USB
+        }
+    } while ((recv >> 16) != 0x7202 && (recv >> 16) != 0xA5A5);
 
-    // if GBA program is already running, and only `Start` is pressed on it
-    if (recv == (GBAKey::START))
+    if (updaterUp) {
+        watchdog_hw->scratch[5] = 0; // System::BootMode::DEFAULT
+        watchdog_reboot(0, 0, 50);
+        while (true) { __wfi(); }
+    }
+
+    if ((recv >> 16) == 0xA5A5)
         return false;
-    
+
+    setLed(0x00, 0x00, 0x10); // blue: sending the ROM
+
     // -----------------------------------------------------
     // printf("Sending header.\n");
 
@@ -50,7 +101,7 @@ bool sendGBARom(const uint8_t* romAddr, const uint32_t romSize) {
 
     const uint16_t* fdata16 = (const uint16_t*)romAddr;
     for (uint32_t i = 0; i < 0xC0; i += 2)
-        spi32Delay(fdata16[i / 2]);
+        spi32Fast(fdata16[i / 2]);
 
     spi32Delay(0x6200);
 
@@ -65,6 +116,7 @@ bool sendGBARom(const uint8_t* romAddr, const uint32_t romSize) {
     if ((token >> 24) != 0x73)
     {
         // fprintf(stderr, "Failed handshake!\n");
+        setLed(0x10, 0x00, 0x10); // magenta: handshake failed
         exit(1);
     }
 
@@ -109,11 +161,12 @@ bool sendGBARom(const uint8_t* romAddr, const uint32_t romSize) {
         dat = seed ^ dat ^ (0xFE000000 - i) ^ 0x43202F2F;
 
         // send
-        uint32_t chk = spi32Delay(dat) >> 16;
+        uint32_t chk = spi32Fast(dat) >> 16;
 
         if (chk != (i & 0xFFFF))
         {
             // fprintf(stderr, "Transmission error at byte %zu: chk == %08x\n", i, chk);
+            setLed(0x10, 0x00, 0x10); // magenta: transfer failed
             exit(1);
         }
     }

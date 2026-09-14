@@ -5,6 +5,7 @@ src/tusb_driver.cpp
 src/usb_descriptors.cpp
 src/xinput_driver.cpp
 src/ps4_driver.cpp
+src/updater_driver.cpp
 )
 target_include_directories(TinyUSB_Gamepad PUBLIC 
 src
@@ -15,6 +16,9 @@ ${CMAKE_SOURCE_DIR}/lib/mbedtls/include
 target_link_libraries(TinyUSB_Gamepad 
 pico_stdlib
 pico_mbedtls
+pico_unique_id
+pico_bootrom
+hardware_watchdog
 tinyusb_device
 rndis
 )

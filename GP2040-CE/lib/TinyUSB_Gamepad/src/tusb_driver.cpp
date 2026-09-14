@@ -17,6 +17,7 @@
 #include "hid_driver.h"
 #include "xinput_driver.h"
 #include "ps4_driver.h"
+#include "updater_driver.h"
 
 UsbMode usb_mode = USB_MODE_HID;
 InputMode input_mode = INPUT_MODE_XINPUT;
@@ -39,6 +40,26 @@ void initialize_driver(InputMode mode)
 		usb_mode = USB_MODE_NET;
 
 	tusb_init();
+}
+
+void initialize_updater(void)
+{
+	usb_mode = USB_MODE_UPDATER;
+	tusb_init();
+}
+
+// Only the updater identity is USB 2.1 and has a BOS descriptor
+uint8_t const *tud_descriptor_bos_cb(void)
+{
+	return usb_mode == USB_MODE_UPDATER ? updater_bos_descriptor_cb() : NULL;
+}
+
+// Vendor control requests (MS OS 2.0 descriptor set)
+bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const *request)
+{
+	if (usb_mode == USB_MODE_UPDATER)
+		return updater_vendor_control_xfer_cb(rhport, stage, request);
+	return false;
 }
 
 void receive_report(uint8_t *buffer)
@@ -82,7 +103,11 @@ const usbd_class_driver_t *usbd_app_driver_get_cb(uint8_t *driver_count)
 {
 	*driver_count = 1;
 
-	if (usb_mode == USB_MODE_NET)
+	if (usb_mode == USB_MODE_UPDATER)
+	{
+		return &updater_driver;
+	}
+	else if (usb_mode == USB_MODE_NET)
 	{
 		return &net_driver;
 	}
