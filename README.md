@@ -4,9 +4,6 @@ Turns a [GB-Link](https://gblink.io) adapter and a Game Boy Advance into a USB c
 
 This is a fork of [gba-pico-gamepad](https://github.com/copyrat90/gba-pico-gamepad) by copyrat90, adapted to run on GB-Link hardware.
 
-```
-GBA  ── GBC link cable ──  GB-Link  ── USB ──  PC / Switch / PS3 / PS4
-```
 
 
 # Requirements
