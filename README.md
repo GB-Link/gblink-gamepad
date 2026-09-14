@@ -79,14 +79,28 @@ This is a modified [GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE) 
 Requirements:
 
 * [devkitARM](https://devkitpro.org/wiki/Getting_Started) with the `gba-dev` package
-* Pico SDK 1.5.0 and the Arm GNU toolchain 12.3, e.g. as installed by the Raspberry Pi Pico VS Code extension
+* Pico SDK 1.5.0, **including its submodules**
+* Arm GNU Toolchain 12.3.Rel1 (`arm-none-eabi`)
 * `cmake`, `make`, `python3`
+
+Set up the Pico SDK and toolchain in the locations `build.sh` expects:
+
+1. Clone the SDK with its submodules:
+    ```bash
+    git clone -b 1.5.0 --recurse-submodules https://github.com/raspberrypi/pico-sdk.git ~/.pico-sdk/sdk/1.5.0
+    ```
+    If you already cloned it without `--recurse-submodules`, run `git submodule update --init` inside it. Without the submodules, CMake fails with `Cannot specify include directories for target "pico_lwip"`.
+2. Download the `arm-none-eabi` build of Arm GNU Toolchain 12.3.Rel1 for your OS from [Arm's download page](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads). Extract it so that `~/.pico-sdk/toolchain/12_3_Rel1/bin/arm-none-eabi-gcc` exists.
+
+The Raspberry Pi Pico VS Code extension installs SDKs and toolchains in this same `~/.pico-sdk` layout.
+
+Then build:
 
 ```bash
 ./build.sh
 ```
 
-The script defaults to `/opt/devkitpro`, `~/.pico-sdk/sdk/1.5.0` and `~/.pico-sdk/toolchain/12_3_Rel1`. Override them with `DEVKITPRO`, `PICO_SDK_PATH` and `PICO_TOOLCHAIN_PATH`.
+To use other locations, set `DEVKITPRO`, `PICO_SDK_PATH` and `PICO_TOOLCHAIN_PATH`.
 
 The firmware is written to `build/gblink-gamepad.uf2`.
 

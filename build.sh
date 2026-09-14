@@ -12,6 +12,14 @@ export PICO_TOOLCHAIN_PATH=${PICO_TOOLCHAIN_PATH:-$HOME/.pico-sdk/toolchain/12_3
 # pico-sdk 1.5.0 sub-projects (pioasm) predate CMake 4's policy floor
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 
+for lib in tinyusb lwip mbedtls; do
+    if [ -z "$(ls -A "$PICO_SDK_PATH/lib/$lib" 2>/dev/null)" ]; then
+        echo "pico-sdk submodule lib/$lib is missing in $PICO_SDK_PATH" >&2
+        echo "Run: git -C \"$PICO_SDK_PATH\" submodule update --init" >&2
+        exit 1
+    fi
+done
+
 cd gba-link-connection/examples/LinkSPI_demo/
 make rebuild
 cp LinkSPI_demo.mb.gba ../../../build/
@@ -31,7 +39,7 @@ cd ../GP2040-CE/
 mkdir -p build/
 cd build/
 cmake ../
-make -j$(nproc)
+make -j"$(getconf _NPROCESSORS_ONLN)"
 cp GP2040-CE_0.7.1_Pico.uf2 ../../build/gblink-gamepad.uf2
 echo
 echo "Built build/gblink-gamepad.uf2"
