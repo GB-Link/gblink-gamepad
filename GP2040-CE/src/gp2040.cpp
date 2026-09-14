@@ -2,6 +2,7 @@
 #include "gp2040.h"
 #include "helper.h"
 #include "system.h"
+#include "gba/spi32.h"
 
 #include "configmanager.h" // Global Managers
 #include "storagemanager.h"
@@ -173,7 +174,50 @@ GP2040::BootAction GP2040::getBootAction() {
 			{
 				// Determine boot action based on gamepad state during boot
 				Gamepad * gamepad = Storage::getInstance().GetGamepad();
-				gamepad->read();
+
+				// Mode selection window: the GBA screen shows the hold map and a
+				// countdown, and the last mode button seen wins. The countdown
+				// only advances on polls the GBA answered; if it never answers,
+				// give up after linkWaitMs and keep the saved mode.
+				const uint32_t modeButtonMask = GAMEPAD_MASK_B1 | GAMEPAD_MASK_B2
+				                              | GAMEPAD_MASK_L1 | GAMEPAD_MASK_R1;
+				uint8_t selectedMode = gamepad->options.inputMode;
+				uint32_t heldButtons = 0;
+				uint32_t heldDpad = 0;
+				const int scanMs = 5000, stepMs = 10, linkWaitMs = 10000;
+				int elapsed = 0, unanswered = 0;
+				while (elapsed < scanMs) {
+					uint32_t framesBefore = gba::validFrames;
+					gba::modeScanWord = gba::modeScanFrame(selectedMode, (scanMs - elapsed + 999) / 1000);
+					gamepad->read();
+					uint32_t b = gamepad->state.buttons;
+					if (b & GAMEPAD_MASK_B1)      selectedMode = INPUT_MODE_SWITCH;
+					else if (b & GAMEPAD_MASK_B2) selectedMode = INPUT_MODE_XINPUT;
+					else if (b & GAMEPAD_MASK_L1) selectedMode = INPUT_MODE_HID;
+					else if (b & GAMEPAD_MASK_R1) selectedMode = INPUT_MODE_PS4;
+					heldButtons |= b;
+					heldDpad |= gamepad->state.dpad;
+					sleep_ms(stepMs);
+					if (gba::validFrames != framesBefore) {
+						elapsed += stepMs;
+					} else if (++unanswered * stepMs > linkWaitMs) {
+						break;
+					}
+				}
+				gba::modeScanWord = 0;
+
+				// Present the pick to the checks below as a single mode button,
+				// keeping other buttons seen so the bootloader combo still works
+				uint32_t modeMask = 0;
+				switch (selectedMode) {
+					case INPUT_MODE_SWITCH: modeMask = GAMEPAD_MASK_B1; break;
+					case INPUT_MODE_XINPUT: modeMask = GAMEPAD_MASK_B2; break;
+					case INPUT_MODE_HID:    modeMask = GAMEPAD_MASK_L1; break;
+					case INPUT_MODE_PS4:    modeMask = GAMEPAD_MASK_R1; break;
+					default: break;
+				}
+				gamepad->state.buttons = modeMask | (heldButtons & ~modeButtonMask);
+				gamepad->state.dpad = heldDpad;
 
 				if (gamepad->pressedF1() && gamepad->pressedUp()) {
 					return BootAction::ENTER_USB_MODE;

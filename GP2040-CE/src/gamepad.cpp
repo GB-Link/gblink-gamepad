@@ -15,6 +15,7 @@
 
 #include "gba/spi32.h"
 #include "gba/GBAKey.h"
+#include "system.h"
 
 // MUST BE DEFINED for mpgs
 uint32_t getMillis() {
@@ -179,30 +180,84 @@ void Gamepad::process()
 
 void Gamepad::read()
 {
-	constexpr uint32_t GBA_SPI_ERROR = 0xFFFFFFFFu;
+	static uint32_t errorStreak = 0;
+	static uint32_t snapshotHold = 0;
+	static bool linkUp = true;
 
-	uint32_t received = gba::spi32(state.buttons);
-
-	if (received == GBA_SPI_ERROR) {
-		state.dpad = 0;
-		state.buttons = 0;
+	// Pick what the GBA screen shows: the mode menu during the boot scan, the
+	// pin snapshot while the link is down (and ~2s after it recovers), and
+	// otherwise the active mode and buttons.
+	uint32_t sendValue;
+	if (gba::modeScanWord != 0) {
+		sendValue = gba::modeScanWord;
+	} else if (!linkUp || snapshotHold > 0) {
+		sendValue = gba::linkDiagSnapshot;
 	} else {
-		state.dpad = 0
-			| ((received & GBAKey::UP)    ? mapDpadUp->buttonMask : 0)
-			| ((received & GBAKey::DOWN)  ? mapDpadDown->buttonMask : 0)
-			| ((received & GBAKey::LEFT)  ? mapDpadLeft->buttonMask  : 0)
-			| ((received & GBAKey::RIGHT) ? mapDpadRight->buttonMask : 0)
-		;
-
-		state.buttons = 0
-			| ((received & GBAKey::B)      ? mapButtonB1->buttonMask  : 0)
-			| ((received & GBAKey::A)      ? mapButtonB2->buttonMask  : 0)
-			| ((received & GBAKey::L)      ? mapButtonL1->buttonMask  : 0)
-			| ((received & GBAKey::R)      ? mapButtonR1->buttonMask  : 0)
-			| ((received & GBAKey::SELECT) ? mapButtonS1->buttonMask  : 0)
-			| ((received & GBAKey::START)  ? mapButtonS2->buttonMask  : 0)
-		;
+		sendValue = gba::runningFrame(options.inputMode, state.buttons);
 	}
+	if (snapshotHold > 0) snapshotHold--;
+	uint32_t received = gba::spi32(sendValue);
+
+	// Controller ROM frames carry 0xA5A5 in the upper half; anything else
+	// (idle bus, GBA BIOS, torn word) is rejected.
+	bool validFrame = (received >> 16) == 0xA5A5;
+
+	// Keep the last keys through short invalid stretches (the ROM misses
+	// polls while redrawing its screen) so held buttons don't flicker.
+	static uint32_t heldKeys = 0;
+
+	if (!validFrame) {
+		errorStreak++;
+		if (errorStreak > 17) { // ~50ms at the 3ms poll rate
+			heldKeys = 0;
+		}
+		if (linkUp && errorStreak >= 333) { // ~1s
+			linkUp = false;
+			gba::setLed(0x08, 0x00, 0x00); // red: link down
+		}
+		// Periodically rebuild the link pin and PIO configuration in case
+		// something disturbed the pin muxing
+		if (errorStreak == 67 || errorStreak % 333 == 0) {
+			gba::reinitLink();
+		}
+		// ~2s: the GBA was switched off or unplugged. Reboot so the boot path
+		// waits for it, multiboots it again and shows the mode menu.
+		if (errorStreak >= 667) {
+			System::reboot(System::BootMode::DEFAULT);
+		}
+	} else {
+		errorStreak = 0;
+		heldKeys = received;
+		gba::validFrames++;
+		if (!linkUp) {
+			linkUp = true;
+			snapshotHold = 667; // keep the snapshot on the GBA screen ~2s
+			gba::setLed(0x00, 0x08, 0x00); // green: link up
+		}
+	}
+
+	state.dpad = 0
+		| ((heldKeys & GBAKey::UP)    ? mapDpadUp->buttonMask : 0)
+		| ((heldKeys & GBAKey::DOWN)  ? mapDpadDown->buttonMask : 0)
+		| ((heldKeys & GBAKey::LEFT)  ? mapDpadLeft->buttonMask  : 0)
+		| ((heldKeys & GBAKey::RIGHT) ? mapDpadRight->buttonMask : 0)
+	;
+
+	// Match face button labels: B1 is "B" on Switch but "A"/Cross elsewhere.
+	// The boot scan always uses the Switch layout so the mode hold map is the
+	// same whatever mode is saved.
+	const bool nintendoLayout = gba::modeScanWord != 0 || options.inputMode == INPUT_MODE_SWITCH;
+	const uint32_t keyForB1 = nintendoLayout ? GBAKey::B : GBAKey::A;
+	const uint32_t keyForB2 = nintendoLayout ? GBAKey::A : GBAKey::B;
+
+	state.buttons = 0
+		| ((heldKeys & keyForB1)       ? mapButtonB1->buttonMask  : 0)
+		| ((heldKeys & keyForB2)       ? mapButtonB2->buttonMask  : 0)
+		| ((heldKeys & GBAKey::L)      ? mapButtonL1->buttonMask  : 0)
+		| ((heldKeys & GBAKey::R)      ? mapButtonR1->buttonMask  : 0)
+		| ((heldKeys & GBAKey::SELECT) ? mapButtonS1->buttonMask  : 0)
+		| ((heldKeys & GBAKey::START)  ? mapButtonS2->buttonMask  : 0)
+	;
 
 	state.lx = GAMEPAD_JOYSTICK_MID;
 	state.ly = GAMEPAD_JOYSTICK_MID;

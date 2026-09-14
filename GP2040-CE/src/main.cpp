@@ -12,6 +12,7 @@
 
 // GBA multiboot includes
 #include "gba/multiboot.h"
+#include "gba/spi32.h"
 #include "../../build/gba_rom.hpp"
 
 // Launch our second core with additional modules loaded in
@@ -27,9 +28,10 @@ void core1() {
 int main() {
 	// Send GBA program via SPI, which sends its key presses to the RPi Pico
 	bool isAlreadyRunning = !gba::sendGBARom(LinkSPI_demo_mb_gba, LinkSPI_demo_mb_gba_len);
-	// Give user some time to change Input Mode (https://gp2040-ce.info/#/usage?id=input-modes)
+	gba::setLed(0x00, 0x08, 0x00); // green: link up
+	// Give the ROM time to start before the input mode selection window
 	if (!isAlreadyRunning)
-		sleep_ms(3000);
+		sleep_ms(1000);
 
 	// Create GP2040 Main Core (core0), Core1 is dependent on Core0
 	GP2040 * gp2040 = new GP2040();
